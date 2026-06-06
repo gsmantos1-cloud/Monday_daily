@@ -184,6 +184,7 @@ export function Chat() {
         channel: data.channel,
         dm_channel: data.dm_channel,
         avatar_color: data.avatar_color,
+        is_dm: data.is_dm,
       };
       setChatMentionAlerts(prev => [...prev, alert]);
       setTimeout(() => {
@@ -460,9 +461,9 @@ export function Chat() {
                 {alert.from?.[0]?.toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-blue-300">💬 {alert.from} mencionou você!</p>
+                <p className="text-sm font-bold text-blue-300">💬 {alert.from} {alert.is_dm ? 'enviou uma mensagem!' : 'mencionou você!'}</p>
                 <p className="text-xs text-blue-400 mt-0.5 truncate">"{alert.content}"</p>
-                <p className="text-xs text-blue-500 mt-0.5 font-semibold">#{alert.channel} — clique para ver</p>
+                <p className="text-xs text-blue-500 mt-0.5 font-semibold">{alert.is_dm ? 'Mensagem direta' : `#${alert.channel}`} — clique para ver</p>
                 <button
                   onClick={e => {
                     e.stopPropagation();

@@ -716,6 +716,27 @@ function createAndBroadcastMessage(userId, channel, content) {
   const enriched = { ...msg, user_name: sender?.name, avatar_color: sender?.avatar_color };
   io.emit(`message:${channel}`, enriched);
 
+  // Se for mensagem direta (dm_X_Y) → notifica o destinatário com quem enviou
+  if (channel.startsWith('dm_')) {
+    const parts = channel.split('_'); // ['dm', idA, idB]
+    const idA = parseInt(parts[1]);
+    const idB = parseInt(parts[2]);
+    const recipientId = (userId === idA) ? idB : idA;
+    if (recipientId && recipientId !== userId) {
+      const preview = content.trim().length > 60 ? content.trim().slice(0, 60) + '…' : content.trim();
+      const notif = db.notifications.create({
+        user_id: recipientId, type: 'message',
+        message: `💬 ${sender?.name}: ${preview}`, link: `/chat`, read: false
+      });
+      io.emit(`notification:new:${recipientId}`, notif);
+      // Alerta visual de DM (mesmo formato do @menção)
+      io.emit(`chat:mention:${recipientId}`, {
+        from: sender?.name, from_id: userId, channel, dm_channel: channel,
+        content: content.trim(), avatar_color: sender?.avatar_color, is_dm: true,
+      });
+    }
+  }
+
   // Detecta @menções → cria DM + notifica
   const mentionRegex = /@(\w+)/g;
   const allUsers = db.users.all();

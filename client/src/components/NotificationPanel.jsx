@@ -18,6 +18,7 @@ function relativeTime(dateStr) {
 
 const TYPE_DOT = {
   mention: '#3b82f6',      // blue
+  message: '#10b981',      // green (mensagem direta)
   announcement: '#eab308', // yellow
   task_alert: '#ef4444',   // red
 };
