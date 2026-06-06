@@ -1,11 +1,9 @@
 /**
  * Vercel Serverless Entry Point
- * Todas as rotas /api/* chegam aqui e são tratadas pelo Express.
+ * Todas as rotas /api/* e /socket.io/* chegam aqui.
+ * As variáveis de ambiente vêm do painel do Vercel (não usa dotenv aqui).
  */
 process.env.IS_SERVERLESS = '1';
-
-const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../server/.env') });
 
 const db = require('../server/db-turso');
 const app = require('../server/index');
@@ -13,14 +11,19 @@ const app = require('../server/index');
 let initPromise = null;
 
 module.exports = async (req, res) => {
-  // Inicializa Turso uma vez por instância (cache entre requests quentes)
-  if (!initPromise) {
-    initPromise = db.init().catch(err => {
-      console.error('[Serverless] DB init error:', err.message);
-      initPromise = null; // permite retry
-      throw err;
-    });
+  try {
+    if (!initPromise) {
+      initPromise = db.init().catch(err => {
+        initPromise = null; // permite retry numa próxima request
+        throw err;
+      });
+    }
+    await initPromise;
+    return app(req, res);
+  } catch (err) {
+    console.error('[Serverless] erro:', err);
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Erro interno: ' + (err.message || 'desconhecido') }));
   }
-  await initPromise;
-  return app(req, res);
 };

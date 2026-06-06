@@ -1,0 +1,9 @@
+{
+  "name": "monday-daily",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GS Mantos Team Hub - gestão de equipe (Vercel + Turso)",
+  "engines": {
+    "node": "20.x"
+  }
+}
