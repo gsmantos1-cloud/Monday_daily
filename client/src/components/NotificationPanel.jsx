@@ -24,7 +24,7 @@ const TYPE_DOT = {
 
 export function NotificationPanel({ collapsed }) {
   const { user, token } = useAuth();
-  const { on } = useSocket();
+  const { on, connected } = useSocket();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -41,7 +41,7 @@ export function NotificationPanel({ collapsed }) {
       .catch(() => {});
   }, [token]);
 
-  // Listen for real-time notifications
+  // Listen for real-time notifications (WebSocket)
   useEffect(() => {
     if (!user?.id || !on) return;
     const off = on(`notification:new:${user.id}`, (notif) => {
@@ -49,6 +49,18 @@ export function NotificationPanel({ collapsed }) {
     });
     return () => off?.();
   }, [user?.id, on]);
+
+  // Polling de notificações quando sem WebSocket (modo nuvem/serverless)
+  useEffect(() => {
+    if (!token || connected) return;
+    const interval = setInterval(() => {
+      fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : [])
+        .then(setNotifications)
+        .catch(() => {});
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [token, connected]);
 
   // Close on outside click
   useEffect(() => {

@@ -3,10 +3,10 @@ import { Sidebar } from './Sidebar.jsx';
 import { useSocket } from '../contexts/SocketContext.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { toast } from './Toast.jsx';
-import { SignalIcon, SignalSlashIcon } from '@heroicons/react/24/outline';
+import { SignalIcon, SignalSlashIcon, CloudIcon } from '@heroicons/react/24/outline';
 
 export function Layout({ children }) {
-  const { connected, on } = useSocket();
+  const { connected, serverless, on } = useSocket();
   const { user } = useAuth();
   const prevConnected = useRef(connected);
 
@@ -34,11 +34,13 @@ export function Layout({ children }) {
           style={{ backgroundColor: '#090909', borderColor: '#1f1f1f' }}
         >
           <div /> {/* spacer */}
-          <div className={`flex items-center gap-1.5 text-xs font-semibold ${connected ? '' : 'text-gray-600'}`}
-            style={connected ? { color: '#D4AF37' } : {}}>
+          <div className={`flex items-center gap-1.5 text-xs font-semibold ${connected || serverless ? '' : 'text-gray-600'}`}
+            style={connected ? { color: '#D4AF37' } : serverless ? { color: '#10b981' } : {}}>
             {connected
               ? <><SignalIcon className="w-3.5 h-3.5" /> <span>ONLINE</span></>
-              : <><SignalSlashIcon className="w-3.5 h-3.5" /> <span>RECONECTANDO…</span></>
+              : serverless
+                ? <><CloudIcon className="w-3.5 h-3.5" /> <span>NUVEM</span></>
+                : <><SignalSlashIcon className="w-3.5 h-3.5" /> <span>CONECTANDO…</span></>
             }
           </div>
         </header>

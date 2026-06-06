@@ -8,6 +8,8 @@ export function SocketProvider({ children }) {
   const { token } = useAuth();
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
+  // serverless = WebSocket indisponível (ex: Vercel) → app usa polling
+  const [serverless, setServerless] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
 
   useEffect(() => {
@@ -27,8 +29,14 @@ export function SocketProvider({ children }) {
     });
     socketRef.current = socket;
 
-    socket.on('connect', () => setConnected(true));
-    socket.on('connect_error', () => setConnected(false));
+    let failCount = 0;
+    socket.on('connect', () => { setConnected(true); setServerless(false); failCount = 0; });
+    socket.on('connect_error', () => {
+      setConnected(false);
+      failCount++;
+      // Após algumas falhas, assume modo serverless (sem WebSocket)
+      if (failCount >= 2) setServerless(true);
+    });
     socket.on('disconnect', () => setConnected(false));
     socket.on('users:online', (ids) => setOnlineUsers(ids));
 
@@ -45,7 +53,7 @@ export function SocketProvider({ children }) {
   };
 
   return (
-    <SocketContext.Provider value={{ socket: socketRef.current, connected, onlineUsers, emit, on }}>
+    <SocketContext.Provider value={{ socket: socketRef.current, connected, serverless, onlineUsers, emit, on }}>
       {children}
     </SocketContext.Provider>
   );
