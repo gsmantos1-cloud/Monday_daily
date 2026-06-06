@@ -4,7 +4,7 @@
  * Usa cache em memória para performance, sincroniza com o Turso a cada write.
  */
 
-const { createClient } = require('@libsql/client');
+const { createClient } = require('@libsql/client/web');
 
 let client;
 function getClient() {

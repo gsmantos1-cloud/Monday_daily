@@ -9,7 +9,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { createClient } = require('@libsql/client');
+const { createClient } = require('@libsql/client/web');
 
 const DB_PATH = path.join(__dirname, 'team-hub.json');
 

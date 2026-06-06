@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -7,7 +8,11 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const db = require('./db');
+
+// Usa Turso se credenciais disponíveis, senão fallback para JSON local
+const db = (process.env.TURSO_URL && process.env.TURSO_AUTH_TOKEN)
+  ? require('./db-turso')
+  : require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -1175,7 +1180,6 @@ function processRecurringTasks() {
     }
   });
 }
-processRecurringTasks();
 setInterval(processRecurringTasks, 60 * 60 * 1000);
 
 // ──────────────────────────────────────────────
@@ -1205,7 +1209,6 @@ function resetFixedTasks() {
     }
   });
 }
-resetFixedTasks();
 // Run every hour to catch midnight crossings even with system clock drift
 setInterval(resetFixedTasks, 60 * 60 * 1000);
 
@@ -1296,19 +1299,38 @@ app.delete('/api/admin/backups/:filename', auth, requireRole('owner'), (req, res
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, '0.0.0.0', () => {
-  const { networkInterfaces } = require('os');
-  const nets = networkInterfaces();
-  let localIP = 'localhost';
-  for (const iface of Object.values(nets)) {
-    for (const addr of iface) {
-      if (addr.family === 'IPv4' && !addr.internal) { localIP = addr.address; break; }
-    }
-    if (localIP !== 'localhost') break;
+
+async function startServer() {
+  // Inicializa o banco (Turso ou JSON local)
+  if (db.init) {
+    console.log('[DB] Conectando ao Turso...');
+    await db.init();
   }
-  console.log(`\n🚀 Team Hub Server rodando em:`);
-  console.log(`   Local:   http://localhost:${PORT}`);
-  console.log(`   Rede:    http://${localIP}:${PORT}`);
-  console.log(`   Banco:   ${require('path').join(__dirname, 'team-hub.json')}`);
-  console.log(`   IA: ${process.env.ANTHROPIC_API_KEY ? '✅ ANTHROPIC_API_KEY configurada' : '⚠  Sem API key (usando templates)'}\n`);
+
+  // Processos de inicialização
+  processRecurringTasks();
+  resetFixedTasks();
+
+  server.listen(PORT, '0.0.0.0', () => {
+    const { networkInterfaces } = require('os');
+    const nets = networkInterfaces();
+    let localIP = 'localhost';
+    for (const iface of Object.values(nets)) {
+      for (const addr of iface) {
+        if (addr.family === 'IPv4' && !addr.internal) { localIP = addr.address; break; }
+      }
+      if (localIP !== 'localhost') break;
+    }
+    const dbMode = (process.env.TURSO_URL && process.env.TURSO_AUTH_TOKEN) ? '☁️  Turso (nuvem)' : '📁 JSON local';
+    console.log(`\n🚀 Team Hub Server rodando em:`);
+    console.log(`   Local:   http://localhost:${PORT}`);
+    console.log(`   Rede:    http://${localIP}:${PORT}`);
+    console.log(`   Banco:   ${dbMode}`);
+    console.log(`   IA: ${process.env.ANTHROPIC_API_KEY ? '✅ ANTHROPIC_API_KEY configurada' : '⚠  Sem API key (usando templates)'}\n`);
+  });
+}
+
+startServer().catch(err => {
+  console.error('❌ Erro ao iniciar servidor:', err.message);
+  process.exit(1);
 });
