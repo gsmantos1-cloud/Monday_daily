@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+team-hub.json
+team-hub.json.bak
+team-hub.json.tmp
+server/backups/
+dist/
+.vite/
+*.log
+.DS_Store
+Thumbs.db
