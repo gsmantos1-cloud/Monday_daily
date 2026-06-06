@@ -35,8 +35,9 @@ app.use(express.json());
 const JWT_SECRET = process.env.JWT_SECRET || 'team-hub-s3cr3t-k3y-2024';
 
 // ── File uploads (multer) ──────────────────────
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+// Em serverless o disco é read-only exceto /tmp
+const uploadsDir = IS_SERVERLESS ? '/tmp/uploads' : path.join(__dirname, 'uploads');
+try { if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true }); } catch {}
 
 const storage = multer.diskStorage({
   destination: uploadsDir,
@@ -1224,8 +1225,8 @@ setInterval(resetFixedTasks, 60 * 60 * 1000);
 // ──────────────────────────────────────────────
 //  BACKUPS: rotating snapshots (hourly + daily + manual)
 // ──────────────────────────────────────────────
-const BACKUP_DIR = path.join(__dirname, 'backups');
-if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+const BACKUP_DIR = IS_SERVERLESS ? '/tmp/backups' : path.join(__dirname, 'backups');
+try { if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch {}
 
 function listBackups() {
   if (!fs.existsSync(BACKUP_DIR)) return [];
@@ -1263,20 +1264,22 @@ function takeBackup(kind = 'manual') {
   }
 }
 
-// Schedule: hourly backup every hour, daily backup at next midnight + every 24h
-takeBackup('hourly'); // initial on boot
-setInterval(() => takeBackup('hourly'), 60 * 60 * 1000);
+// Schedule: hourly + daily backups (somente em modo persistente; em serverless o Turso já é a nuvem)
+if (!IS_SERVERLESS) {
+  takeBackup('hourly'); // initial on boot
+  setInterval(() => takeBackup('hourly'), 60 * 60 * 1000);
 
-const msUntilMidnight = () => {
-  const now = new Date();
-  const next = new Date(now);
-  next.setHours(24, 0, 0, 0);
-  return next.getTime() - now.getTime();
-};
-setTimeout(() => {
-  takeBackup('daily');
-  setInterval(() => takeBackup('daily'), 24 * 60 * 60 * 1000);
-}, msUntilMidnight());
+  const msUntilMidnight = () => {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(24, 0, 0, 0);
+    return next.getTime() - now.getTime();
+  };
+  setTimeout(() => {
+    takeBackup('daily');
+    setInterval(() => takeBackup('daily'), 24 * 60 * 60 * 1000);
+  }, msUntilMidnight());
+}
 
 // Backup endpoints (owner only)
 app.get('/api/admin/backups', auth, requireRole('owner'), (req, res) => {

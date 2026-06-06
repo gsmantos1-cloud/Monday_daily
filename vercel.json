@@ -12,7 +12,7 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/socket.io/(.*)", "destination": "/api/index" },
-    { "source": "/((?!api/).*)", "destination": "/client/dist/index.html" }
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
