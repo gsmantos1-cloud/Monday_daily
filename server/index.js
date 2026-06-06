@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -9,16 +8,26 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Modo serverless (Vercel) — sem Socket.io, sem server.listen
+const IS_SERVERLESS = !!(process.env.VERCEL || process.env.IS_SERVERLESS);
+
 // Usa Turso se credenciais disponíveis, senão fallback para JSON local
 const db = (process.env.TURSO_URL && process.env.TURSO_AUTH_TOKEN)
   ? require('./db-turso')
   : require('./db');
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', credentials: false }
-});
+
+// io: real em dev local, no-op em serverless
+let io;
+if (!IS_SERVERLESS) {
+  const { Server } = require('socket.io');
+  const server = http.createServer(app);
+  io = new Server(server, { cors: { origin: '*', credentials: false } });
+  app._server = server; // guarda referência para startServer()
+} else {
+  io = { emit: () => {}, to: () => ({ emit: () => {} }), on: () => {}, use: () => {} };
+}
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
@@ -1301,16 +1310,14 @@ app.delete('/api/admin/backups/:filename', auth, requireRole('owner'), (req, res
 const PORT = process.env.PORT || 3001;
 
 async function startServer() {
-  // Inicializa o banco (Turso ou JSON local)
   if (db.init) {
     console.log('[DB] Conectando ao Turso...');
     await db.init();
   }
-
-  // Processos de inicialização
   processRecurringTasks();
   resetFixedTasks();
 
+  const server = app._server || http.createServer(app);
   server.listen(PORT, '0.0.0.0', () => {
     const { networkInterfaces } = require('os');
     const nets = networkInterfaces();
@@ -1325,12 +1332,17 @@ async function startServer() {
     console.log(`\n🚀 Team Hub Server rodando em:`);
     console.log(`   Local:   http://localhost:${PORT}`);
     console.log(`   Rede:    http://${localIP}:${PORT}`);
-    console.log(`   Banco:   ${dbMode}`);
-    console.log(`   IA: ${process.env.ANTHROPIC_API_KEY ? '✅ ANTHROPIC_API_KEY configurada' : '⚠  Sem API key (usando templates)'}\n`);
+    console.log(`   Banco:   ${dbMode}\n`);
   });
 }
 
-startServer().catch(err => {
-  console.error('❌ Erro ao iniciar servidor:', err.message);
-  process.exit(1);
-});
+// Exporta app para uso serverless (Vercel)
+module.exports = app;
+
+// Só sobe o servidor se não for serverless
+if (!IS_SERVERLESS) {
+  startServer().catch(err => {
+    console.error('❌ Erro ao iniciar servidor:', err.message);
+    process.exit(1);
+  });
+}

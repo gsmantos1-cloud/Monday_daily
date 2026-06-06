@@ -1,6 +1,7 @@
 node_modules/
 .env
 .env.local
+server/.env
 .env.*.local
 team-hub.json
 team-hub.json.bak
