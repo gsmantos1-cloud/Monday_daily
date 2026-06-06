@@ -117,7 +117,7 @@ function MentionInput({ value, onChange, onKeyDown, users, placeholder }) {
 export function Chat() {
   const { user } = useAuth();
   const api = useApi();
-  const { on, emit, onlineUsers } = useSocket();
+  const { on, emit, onlineUsers, connected } = useSocket();
   const [channels, setChannels] = useState([]);
   const [activeChannel, setActiveChannel] = useState('geral');
   const [activeDmWith, setActiveDmWith] = useState(null); // { id, name, avatar_color } for DMs
@@ -141,6 +141,24 @@ export function Chat() {
   useEffect(() => {
     api.get(`/api/messages/${activeChannel}`).then(setMessages);
   }, [activeChannel]);
+
+  // Polling de mensagens quando não há WebSocket (modo serverless/nuvem)
+  useEffect(() => {
+    if (connected) return; // socket cuida do tempo real
+    const interval = setInterval(() => {
+      api.get(`/api/messages/${activeChannel}`).then(setMessages).catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [connected, activeChannel]);
+
+  // Recarrega canais periodicamente em modo polling (para ver novos canais/DMs)
+  useEffect(() => {
+    if (connected) return;
+    const interval = setInterval(() => {
+      api.get('/api/channels').then(setChannels).catch(() => {});
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [connected]);
 
   useEffect(() => {
     const handler = (msg) => {
@@ -188,11 +206,20 @@ export function Chat() {
     }
   };
 
-  const sendMessage = (e) => {
+  const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
-    emit('message:send', { channel: activeChannel, content: input.trim() });
+    const content = input.trim();
     setInput('');
+    try {
+      const msg = await api.post(`/api/messages/${activeChannel}`, { content });
+      // Se houver WebSocket, o echo do socket adiciona a mensagem.
+      // Sem WebSocket (serverless), adiciona localmente na hora.
+      if (!connected && msg) setMessages(p => [...p, msg]);
+    } catch (err) {
+      console.error('Erro ao enviar mensagem:', err);
+      setInput(content); // restaura para o usuário tentar de novo
+    }
   };
 
   const createChannel = async (e) => {

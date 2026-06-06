@@ -708,6 +708,47 @@ app.get('/api/messages/:channel', auth, (req, res) => {
   res.json(db.messages.byChannel(req.params.channel));
 });
 
+// Cria e processa uma mensagem (usado pelo socket E pelo REST/serverless)
+function createAndBroadcastMessage(userId, channel, content) {
+  if (!content?.trim()) return null;
+  const msg = db.messages.create({ user_id: userId, channel, content: content.trim() });
+  const sender = db.users.find(userId);
+  const enriched = { ...msg, user_name: sender?.name, avatar_color: sender?.avatar_color };
+  io.emit(`message:${channel}`, enriched);
+
+  // Detecta @menções → cria DM + notifica
+  const mentionRegex = /@(\w+)/g;
+  const allUsers = db.users.all();
+  let m;
+  while ((m = mentionRegex.exec(content.trim())) !== null) {
+    const mentionedName = m[1].toLowerCase();
+    const mentionedUser = allUsers.find(u => u.name.toLowerCase().replace(/\s+/g, '').startsWith(mentionedName));
+    if (mentionedUser && mentionedUser.id !== userId) {
+      const dmName = `dm_${Math.min(userId, mentionedUser.id)}_${Math.max(userId, mentionedUser.id)}`;
+      if (!db.channels.findByName(dmName)) {
+        db.channels.create({ name: dmName, description: '', type: 'dm', created_by: userId });
+      }
+      io.emit(`chat:mention:${mentionedUser.id}`, {
+        from: sender?.name, from_id: userId, channel, dm_channel: dmName,
+        content: content.trim(), avatar_color: sender?.avatar_color,
+      });
+      const notif = db.notifications.create({
+        user_id: mentionedUser.id, type: 'mention',
+        message: `${sender?.name} mencionou você no chat`, link: `/chat`, read: false
+      });
+      io.emit(`notification:new:${mentionedUser.id}`, notif);
+    }
+  }
+  return enriched;
+}
+
+// REST: enviar mensagem (funciona em serverless onde não há WebSocket)
+app.post('/api/messages/:channel', auth, (req, res) => {
+  const enriched = createAndBroadcastMessage(req.user.id, req.params.channel, req.body.content);
+  if (!enriched) return res.status(400).json({ error: 'Mensagem vazia' });
+  res.json(enriched);
+});
+
 // ──────────────────────────────────────────────
 //  REPORTS
 // ──────────────────────────────────────────────
@@ -1096,45 +1137,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('message:send', ({ channel, content }) => {
-    if (!content?.trim()) return;
-    const msg = db.messages.create({ user_id: socket.user.id, channel, content: content.trim() });
-    const sender = db.users.find(socket.user.id);
-    const enriched = { ...msg, user_name: sender?.name, avatar_color: sender?.avatar_color };
-    io.emit(`message:${channel}`, enriched);
-
-    // Detect @mentions and create DM + notify
-    const mentionRegex = /@(\w+)/g;
-    const allUsers = db.users.all();
-    let m;
-    while ((m = mentionRegex.exec(content.trim())) !== null) {
-      const mentionedName = m[1].toLowerCase();
-      const mentionedUser = allUsers.find(u => u.name.toLowerCase().replace(/\s+/g, '').startsWith(mentionedName));
-      if (mentionedUser && mentionedUser.id !== socket.user.id) {
-        const myId = socket.user.id;
-        const otherId = mentionedUser.id;
-        const dmName = `dm_${Math.min(myId, otherId)}_${Math.max(myId, otherId)}`;
-        let dmCh = db.channels.findByName(dmName);
-        if (!dmCh) {
-          dmCh = db.channels.create({ name: dmName, description: '', type: 'dm', created_by: myId });
-        }
-        io.emit(`chat:mention:${mentionedUser.id}`, {
-          from: sender?.name,
-          from_id: myId,
-          channel,
-          dm_channel: dmName,
-          content: content.trim(),
-          avatar_color: sender?.avatar_color,
-        });
-        const notif = db.notifications.create({
-          user_id: mentionedUser.id,
-          type: 'mention',
-          message: `${sender?.name} mencionou você no chat`,
-          link: `/chat`,
-          read: false
-        });
-        io.emit(`notification:new:${mentionedUser.id}`, notif);
-      }
-    }
+    createAndBroadcastMessage(socket.user.id, channel, content);
   });
 
   socket.on('disconnect', () => {

@@ -18,10 +18,17 @@ export function SocketProvider({ children }) {
     }
 
     const backendUrl = import.meta.env.VITE_API_URL || window.location.origin;
-    const socket = io(backendUrl, { auth: { token }, transports: ['websocket', 'polling'] });
+    // timeout curto: se WebSocket não conectar (serverless), o app cai para polling
+    const socket = io(backendUrl, {
+      auth: { token },
+      transports: ['websocket'],
+      timeout: 4000,
+      reconnectionAttempts: 3,
+    });
     socketRef.current = socket;
 
     socket.on('connect', () => setConnected(true));
+    socket.on('connect_error', () => setConnected(false));
     socket.on('disconnect', () => setConnected(false));
     socket.on('users:online', (ids) => setOnlineUsers(ids));
 
