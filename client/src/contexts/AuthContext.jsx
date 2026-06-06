@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -11,7 +12,7 @@ export function AuthProvider({ children }) {
 
   const startSession = async (tok) => {
     try {
-      const res = await fetch('/api/sessions', {
+      const res = await fetch(`${API_BASE}/api/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
       });
@@ -20,7 +21,7 @@ export function AuthProvider({ children }) {
       // Heartbeat every 2 minutes
       heartbeatRef.current = setInterval(() => {
         if (sessionIdRef.current) {
-          fetch(`/api/sessions/${sessionIdRef.current}/heartbeat`, {
+          fetch(`${API_BASE}/api/sessions/${sessionIdRef.current}/heartbeat`, {
             method: 'PUT',
             headers: { Authorization: `Bearer ${tok}` },
           }).catch(() => {});
@@ -36,7 +37,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (token) {
-      fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+      fetch(`${API_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.ok ? r.json() : null)
         .then(u => {
           setUser(u);
@@ -51,7 +52,7 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const login = async (email, password) => {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -66,7 +67,7 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (name, email, password) => {
-    const res = await fetch('/api/auth/register', {
+    const res = await fetch(`${API_BASE}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password })

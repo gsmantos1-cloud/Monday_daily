@@ -1,10 +1,12 @@
 import { useAuth } from './AuthContext.jsx';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 export function useApi() {
   const { token } = useAuth();
 
   const request = async (method, path, body) => {
-    const res = await fetch(path, {
+    const res = await fetch(`${API_BASE}${path}`, {
       method,
       headers: {
         'Content-Type': 'application/json',

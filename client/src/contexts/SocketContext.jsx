@@ -17,7 +17,8 @@ export function SocketProvider({ children }) {
       return;
     }
 
-    const socket = io('/', { auth: { token }, transports: ['websocket'] });
+    const backendUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const socket = io(backendUrl, { auth: { token }, transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
     socket.on('connect', () => setConnected(true));
