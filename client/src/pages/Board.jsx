@@ -2090,6 +2090,25 @@ export function Board() {
   const [loading, setLoading] = useState(false);
   const [dragging, setDragging] = useState(null);
 
+  // Protege edições locais recém-feitas de serem sobrescritas pelo polling (modo nuvem/Vercel).
+  // Map<taskId, expiraEm(ms)>: enquanto não expirar, o poll mantém a versão local da tarefa.
+  const pendingEditsRef = useRef(new Map());
+  // Map<taskId, expiraEm(ms)>: tarefas removidas localmente que o poll NÃO deve trazer de volta.
+  const pendingDeletesRef = useRef(new Map());
+  const PENDING_TTL = 8000; // janela p/ cobrir latência de leitura do servidor (Turso)
+
+  const markPending = (taskId) => {
+    pendingEditsRef.current.set(taskId, Date.now() + PENDING_TTL);
+  };
+  const clearPending = (taskId) => {
+    // pequena folga após a confirmação do servidor p/ cobrir read-after-write
+    pendingEditsRef.current.set(taskId, Date.now() + 1500);
+  };
+  const markPendingDelete = (taskId) => {
+    pendingEditsRef.current.delete(taskId);
+    pendingDeletesRef.current.set(taskId, Date.now() + PENDING_TTL);
+  };
+
   const canManage = ['owner', 'manager'].includes(user?.role);
 
   useEffect(() => {
@@ -2163,7 +2182,29 @@ export function Board() {
   useEffect(() => {
     if (connected || !id) return; // com WebSocket, o socket cuida do tempo real
     const interval = setInterval(() => {
-      api.get(`/api/tasks?board_id=${id}`).then(setTasks).catch(() => {});
+      api.get(`/api/tasks?board_id=${id}`).then(serverTasks => {
+        setTasks(prev => {
+          const pending = pendingEditsRef.current;
+          const deletes = pendingDeletesRef.current;
+          // remove marcações expiradas
+          const now = Date.now();
+          for (const [tid, exp] of pending) if (exp <= now) pending.delete(tid);
+          for (const [tid, exp] of deletes) if (exp <= now) deletes.delete(tid);
+          if (pending.size === 0 && deletes.size === 0) return serverTasks;
+          const prevById = new Map(prev.map(t => [t.id, t]));
+          const serverIds = new Set(serverTasks.map(t => t.id));
+          const merged = serverTasks
+            // tarefas removidas localmente: não deixa o servidor trazer de volta
+            .filter(st => !deletes.has(st.id))
+            // tarefas com edição pendente: mantém a versão local (não deixa "voltar")
+            .map(st => pending.has(st.id) && prevById.has(st.id) ? prevById.get(st.id) : st);
+          // tarefas recém-criadas que o servidor ainda não devolveu: preserva no topo
+          for (const [tid] of pending) {
+            if (!serverIds.has(tid) && prevById.has(tid)) merged.unshift(prevById.get(tid));
+          }
+          return merged;
+        });
+      }).catch(() => {});
     }, 4000);
     return () => clearInterval(interval);
   }, [connected, id]);
@@ -2230,7 +2271,27 @@ export function Board() {
   const hasFilters = search || filterAssignee || filterPriority || filterStatus || quickFilter || sortBy.field;
 
   const saveTask = async (taskId, payload) => {
-    await api.put(`/api/tasks/${taskId}`, payload);
+    // Update otimista: reflete na hora e protege do polling até o servidor confirmar.
+    const prevSnapshot = tasks.find(t => t.id === taskId);
+    markPending(taskId);
+    setTasks(p => p.map(x => x.id === taskId ? { ...x, ...payload } : x));
+    setOpenTask(prev => prev?.id === taskId ? { ...prev, ...payload } : prev);
+    try {
+      const updated = await api.put(`/api/tasks/${taskId}`, payload);
+      if (updated?.id) {
+        setTasks(p => p.map(x => x.id === taskId ? updated : x));
+        setOpenTask(prev => prev?.id === taskId ? updated : prev);
+      }
+      clearPending(taskId);
+    } catch (err) {
+      // Falhou: reverte para o estado anterior (verdade do servidor)
+      pendingEditsRef.current.delete(taskId);
+      if (prevSnapshot) {
+        setTasks(p => p.map(x => x.id === taskId ? prevSnapshot : x));
+        setOpenTask(prev => prev?.id === taskId ? prevSnapshot : prev);
+      }
+      alert(err.message || 'Erro ao salvar a alteração');
+    }
   };
 
   const saveNewTask = async (e) => {
@@ -2238,8 +2299,12 @@ export function Board() {
     setLoading(true);
     try {
       const created = await api.post('/api/tasks', { ...form, assignee_id: form.assignee_id || null, board_id: parseInt(id) });
-      // Sem WebSocket (serverless), adiciona localmente na hora.
-      if (!connected && created?.id) setTasks(p => p.some(x => x.id === created.id) ? p : [created, ...p]);
+      // Sem WebSocket (serverless), adiciona localmente na hora e protege do polling
+      // até o servidor devolver a tarefa (cobre latência de leitura do Turso).
+      if (!connected && created?.id) {
+        markPending(created.id);
+        setTasks(p => p.some(x => x.id === created.id) ? p : [created, ...p]);
+      }
       setShowAdd(false);
       setForm(emptyForm);
     } catch (err) {
@@ -2251,11 +2316,41 @@ export function Board() {
 
   const deleteTask = async (taskId) => {
     if (!confirm('Remover esta tarefa?')) return;
-    await api.del(`/api/tasks/${taskId}`);
+    const prevSnapshot = tasks.find(t => t.id === taskId);
+    // Otimista: some da tela na hora e impede o polling de trazer de volta.
+    markPendingDelete(taskId);
+    setTasks(p => p.filter(x => x.id !== taskId));
+    setOpenTask(prev => prev?.id === taskId ? null : prev);
+    try {
+      await api.del(`/api/tasks/${taskId}`);
+      // mantém o escudo até o servidor parar de devolver a tarefa (já expira pelo TTL)
+    } catch (err) {
+      pendingDeletesRef.current.delete(taskId);
+      if (prevSnapshot) setTasks(p => p.some(x => x.id === taskId) ? p : [prevSnapshot, ...p]);
+      alert(err.message || 'Erro ao remover a tarefa');
+    }
   };
 
   const changeStatus = async (taskId, status) => {
-    await api.patch(`/api/tasks/${taskId}/status`, { status });
+    const prevSnapshot = tasks.find(t => t.id === taskId);
+    markPending(taskId);
+    setTasks(p => p.map(x => x.id === taskId ? { ...x, status } : x));
+    setOpenTask(prev => prev?.id === taskId ? { ...prev, status } : prev);
+    try {
+      const updated = await api.patch(`/api/tasks/${taskId}/status`, { status });
+      if (updated?.id) {
+        setTasks(p => p.map(x => x.id === taskId ? updated : x));
+        setOpenTask(prev => prev?.id === taskId ? updated : prev);
+      }
+      clearPending(taskId);
+    } catch (err) {
+      pendingEditsRef.current.delete(taskId);
+      if (prevSnapshot) {
+        setTasks(p => p.map(x => x.id === taskId ? prevSnapshot : x));
+        setOpenTask(prev => prev?.id === taskId ? prevSnapshot : prev);
+      }
+      alert(err.message || 'Erro ao mudar o status');
+    }
   };
 
   const generateAI = async () => {
@@ -2733,8 +2828,11 @@ export function Board() {
               boardId={id}
               onCreateTask={async (payload) => {
                 const created = await api.post('/api/tasks', { ...emptyForm, ...payload, board_id: parseInt(id) });
-                // Sem WebSocket (serverless), adiciona localmente na hora.
-                if (!connected && created?.id) setTasks(p => p.some(x => x.id === created.id) ? p : [created, ...p]);
+                // Sem WebSocket (serverless), adiciona localmente na hora e protege do polling.
+                if (!connected && created?.id) {
+                  markPending(created.id);
+                  setTasks(p => p.some(x => x.id === created.id) ? p : [created, ...p]);
+                }
               }}
               api={api}
             />
