@@ -2060,7 +2060,7 @@ export function Board() {
   const { id } = useParams();
   const { user } = useAuth();
   const api = useApi();
-  const { on } = useSocket();
+  const { on, connected } = useSocket();
 
   const [board, setBoard] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -2158,6 +2158,16 @@ export function Board() {
     return () => offs.forEach(f => f?.());
   }, [on, id]);
 
+  // Polling das tarefas quando não há WebSocket (modo serverless/nuvem, ex: Vercel).
+  // Sem isso, criar/editar/mover/excluir não reflete na tela porque os eventos de socket não chegam.
+  useEffect(() => {
+    if (connected || !id) return; // com WebSocket, o socket cuida do tempo real
+    const interval = setInterval(() => {
+      api.get(`/api/tasks?board_id=${id}`).then(setTasks).catch(() => {});
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [connected, id]);
+
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const filteredTasks = tasks.filter(t => {
     // Hide subtasks from kanban/calendar — they appear only inside their parent in list view
@@ -2227,7 +2237,9 @@ export function Board() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post('/api/tasks', { ...form, assignee_id: form.assignee_id || null, board_id: parseInt(id) });
+      const created = await api.post('/api/tasks', { ...form, assignee_id: form.assignee_id || null, board_id: parseInt(id) });
+      // Sem WebSocket (serverless), adiciona localmente na hora.
+      if (!connected && created?.id) setTasks(p => p.some(x => x.id === created.id) ? p : [created, ...p]);
       setShowAdd(false);
       setForm(emptyForm);
     } catch (err) {
@@ -2720,7 +2732,9 @@ export function Board() {
               onChangeStatus={changeStatus}
               boardId={id}
               onCreateTask={async (payload) => {
-                await api.post('/api/tasks', { ...emptyForm, ...payload, board_id: parseInt(id) });
+                const created = await api.post('/api/tasks', { ...emptyForm, ...payload, board_id: parseInt(id) });
+                // Sem WebSocket (serverless), adiciona localmente na hora.
+                if (!connected && created?.id) setTasks(p => p.some(x => x.id === created.id) ? p : [created, ...p]);
               }}
               api={api}
             />
