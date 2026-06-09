@@ -32,6 +32,33 @@ if (!IS_SERVERLESS) {
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+// ──────────────────────────────────────────────
+//  COERÊNCIA EM SERVERLESS (Vercel + Turso)
+//  Cada instância serverless tem seu próprio cache em memória. Sem isto,
+//  instâncias divergem e as tarefas "aparecem e somem" entre polls.
+//  → Antes de cada request: recarrega o estado mais recente do Turso.
+//  → Antes de responder: garante que os writes foram persistidos (o Vercel
+//    congela a instância após a resposta; sem aguardar, a escrita se perde).
+// ──────────────────────────────────────────────
+if (IS_SERVERLESS && typeof db.refresh === 'function') {
+  app.use(async (req, res, next) => {
+    // Recarrega o cache do banco antes de qualquer leitura/escrita.
+    try { await db.refresh(); } catch {}
+    // Adia o fim da resposta até as escritas pendentes terminarem no Turso.
+    if (typeof db.flush === 'function') {
+      const origEnd = res.end.bind(res);
+      let flushed = false;
+      res.end = (...args) => {
+        if (flushed) return origEnd(...args);
+        flushed = true;
+        db.flush().then(() => origEnd(...args), () => origEnd(...args));
+        return res;
+      };
+    }
+    next();
+  });
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'team-hub-s3cr3t-k3y-2024';
 
 // ── File uploads (multer) ──────────────────────

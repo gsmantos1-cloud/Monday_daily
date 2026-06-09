@@ -30,6 +30,35 @@ let data = {
 
 let initialized = false;
 
+// Recarrega TODO o estado do Turso para o cache em memória.
+// Essencial em serverless (Vercel): cada instância tem seu próprio cache; sem
+// recarregar a cada request, instâncias diferentes devolvem dados divergentes
+// (tarefas "aparecem e somem" conforme o poll cai numa instância ou noutra).
+async function loadFromDb() {
+  const db = getClient();
+  const rows = await db.execute(`SELECT key, value FROM kv`);
+  for (const row of rows.rows) {
+    try {
+      data[row.key] = JSON.parse(row.value);
+    } catch {}
+  }
+  ensureDefaults();
+}
+
+function ensureDefaults() {
+  if (!data._seq) data._seq = {};
+  const seqDefaults = { users: 0, boards: 0, tasks: 0, comments: 0, channels: 2, messages: 0, sessions: 0, goals: 0, ideas: 0, task_history: 0, notifications: 0 };
+  for (const [k, v] of Object.entries(seqDefaults)) {
+    if (!data._seq[k]) data._seq[k] = v;
+  }
+  if (!data.channels?.length) {
+    data.channels = [
+      { id: 1, name: 'geral', description: 'Canal geral da equipe', type: 'public', created_by: null, created_at: new Date().toISOString() },
+      { id: 2, name: 'avisos', description: 'Avisos e comunicados importantes', type: 'public', created_by: null, created_at: new Date().toISOString() }
+    ];
+  }
+}
+
 async function init() {
   if (initialized) return;
   const db = getClient();
@@ -42,29 +71,29 @@ async function init() {
     )
   `);
 
-  // Carregar dados existentes do Turso
-  const rows = await db.execute(`SELECT key, value FROM kv`);
-  for (const row of rows.rows) {
-    try {
-      data[row.key] = JSON.parse(row.value);
-    } catch {}
-  }
-
-  // Garantir campos obrigatórios
-  if (!data._seq) data._seq = {};
-  const seqDefaults = { users: 0, boards: 0, tasks: 0, comments: 0, channels: 2, messages: 0, sessions: 0, goals: 0, ideas: 0, task_history: 0, notifications: 0 };
-  for (const [k, v] of Object.entries(seqDefaults)) {
-    if (!data._seq[k]) data._seq[k] = v;
-  }
-  if (!data.channels?.length) {
-    data.channels = [
-      { id: 1, name: 'geral', description: 'Canal geral da equipe', type: 'public', created_by: null, created_at: new Date().toISOString() },
-      { id: 2, name: 'avisos', description: 'Avisos e comunicados importantes', type: 'public', created_by: null, created_at: new Date().toISOString() }
-    ];
-  }
+  await loadFromDb();
 
   initialized = true;
   console.log('[DB-Turso] Conectado. users:', data.users.length, 'boards:', data.boards.length, 'tasks:', data.tasks.length);
+}
+
+// Garante que escritas pendentes foram persistidas no Turso.
+// Em serverless, deve ser aguardado ANTES de responder — senão o Vercel pode
+// congelar a instância antes do write terminar, perdendo a alteração.
+async function flush() {
+  try { await saveQueue; } catch {}
+}
+
+// Recarrega o estado mais recente do Turso. Aguarda writes pendentes primeiro
+// para nunca descartar uma alteração local ainda não persistida.
+async function refresh() {
+  if (!initialized) return init();
+  try {
+    await saveQueue;
+    await loadFromDb();
+  } catch (err) {
+    console.error('[DB-Turso] Refresh error:', err.message);
+  }
 }
 
 // Fila de writes para evitar race conditions
@@ -411,7 +440,7 @@ const notifications = {
 
 // Exporta init para ser chamado antes de usar o DB
 module.exports = {
-  init,
+  init, refresh, flush,
   users, boards, tasks, comments, channels, messages,
   sessions, goals, ideas, taskHistory, notifications
 };
