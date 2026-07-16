@@ -787,6 +787,25 @@ function createAndBroadcastMessage(userId, channel, content) {
       io.emit(`notification:new:${mentionedUser.id}`, notif);
     }
   }
+
+  // Detecta #<id> de tarefa → notifica o responsável
+  const taskRegex = /#(\d+)/g;
+  const notified = new Set();
+  let tm;
+  while ((tm = taskRegex.exec(content.trim())) !== null) {
+    const taskId = parseInt(tm[1]);
+    if (notified.has(taskId)) continue;
+    notified.add(taskId);
+    const task = db.tasks.findRaw(taskId);
+    if (!task || !task.assignee_id || task.assignee_id === userId) continue;
+    const notif = db.notifications.create({
+      user_id: task.assignee_id, type: 'task_mention',
+      message: `${sender?.name} citou sua tarefa "${task.title}" no chat`,
+      link: `/boards/${task.board_id}?task=${task.id}`, read: false
+    });
+    io.emit(`notification:new:${task.assignee_id}`, notif);
+  }
+
   return enriched;
 }
 

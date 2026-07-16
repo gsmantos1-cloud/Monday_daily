@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useApi } from '../contexts/ApiContext.jsx';
 import { useSocket } from '../contexts/SocketContext.jsx';
@@ -2061,6 +2061,7 @@ export function Board() {
   const { user } = useAuth();
   const api = useApi();
   const { on, connected } = useSocket();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [board, setBoard] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -2208,6 +2209,17 @@ export function Board() {
     }, 4000);
     return () => clearInterval(interval);
   }, [connected, id]);
+
+  // Abre o painel da tarefa ao chegar por link (/boards/:id?task=<id>), ex: marcação no chat
+  useEffect(() => {
+    const taskId = parseInt(searchParams.get('task'));
+    if (!taskId || !tasks.length) return;
+    const t = tasks.find(x => x.id === taskId);
+    if (!t) return;
+    setOpenTask(t);
+    searchParams.delete('task'); // evita reabrir o painel depois de fechado
+    setSearchParams(searchParams, { replace: true });
+  }, [tasks, searchParams]);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const filteredTasks = tasks.filter(t => {

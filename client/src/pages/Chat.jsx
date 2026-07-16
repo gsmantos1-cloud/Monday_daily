@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useApi } from '../contexts/ApiContext.jsx';
 import { useSocket } from '../contexts/SocketContext.jsx';
@@ -56,33 +57,70 @@ function EmojiPicker({ onSelect, onClose }) {
   );
 }
 
-// @mention autocomplete input
-function MentionInput({ value, onChange, onKeyDown, users, placeholder }) {
-  const [mentionSearch, setMentionSearch] = useState('');
-  const [showMentions, setShowMentions] = useState(false);
+// Cores de status das tarefas (mesmas do Board)
+const TASK_STATUS_COLOR = {
+  todo: '#c4c4c4', in_progress: '#fdab3d', stuck: '#e94c5e', review: '#784bd1', done: '#00c875',
+};
+
+// Renderiza o texto da mensagem transformando #<id> em chip clicável da tarefa
+function MessageContent({ content, tasks, onOpenTask }) {
+  const parts = String(content || '').split(/(#\d+)/g);
+  return parts.map((part, i) => {
+    const m = /^#(\d+)$/.exec(part);
+    if (!m) return <span key={i}>{part}</span>;
+    const task = tasks.find(t => t.id === parseInt(m[1]));
+    if (!task) return <span key={i}>{part}</span>;
+    const color = TASK_STATUS_COLOR[task.status] || TASK_STATUS_COLOR.todo;
+    return (
+      <button
+        key={i}
+        onClick={() => onOpenTask(task)}
+        title={`Abrir tarefa em ${task.board_name || 'board'}`}
+        className="inline-flex items-center gap-1 align-baseline px-1.5 py-0.5 mx-0.5 rounded border text-xs font-semibold transition hover:opacity-80"
+        style={{ borderColor: color + '66', backgroundColor: color + '22', color }}
+      >
+        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+        {task.title}
+      </button>
+    );
+  });
+}
+
+// Autocomplete: @ para pessoas, # para tarefas
+function MentionInput({ value, onChange, onKeyDown, users, tasks, placeholder }) {
+  const [search, setSearch] = useState('');
+  const [trigger, setTrigger] = useState(null); // '@' | '#' | null
   const ref = useRef(null);
 
   const handleChange = (e) => {
     const val = e.target.value;
     onChange(val);
     const lastAt = val.lastIndexOf('@');
-    if (lastAt !== -1 && !val.slice(lastAt + 1).includes(' ')) {
-      setShowMentions(true);
-      setMentionSearch(val.slice(lastAt + 1));
-    } else {
-      setShowMentions(false);
+    const lastHash = val.lastIndexOf('#');
+    const pos = Math.max(lastAt, lastHash);
+    // só abre a lista se o gatilho for a última "palavra" sendo digitada
+    if (pos === -1 || val.slice(pos + 1).includes(' ')) {
+      setTrigger(null);
+      return;
     }
+    setTrigger(pos === lastHash ? '#' : '@');
+    setSearch(val.slice(pos + 1));
   };
 
-  const insertMention = (name) => {
-    const lastAt = value.lastIndexOf('@');
-    const newVal = value.slice(0, lastAt) + '@' + name.split(' ')[0] + ' ';
-    onChange(newVal);
-    setShowMentions(false);
+  const insert = (token) => {
+    const pos = value.lastIndexOf(trigger);
+    onChange(value.slice(0, pos) + token + ' ');
+    setTrigger(null);
     ref.current?.focus();
   };
 
-  const filtered = users.filter(u => u.name.toLowerCase().includes(mentionSearch.toLowerCase()));
+  const q = search.toLowerCase();
+  const filteredUsers = trigger === '@' ? users.filter(u => u.name.toLowerCase().includes(q)) : [];
+  // tarefas concluídas ficam fora da lista para não poluir
+  const filteredTasks = trigger === '#'
+    ? tasks.filter(t => t.status !== 'done' && t.title.toLowerCase().includes(q)).slice(0, 8)
+    : [];
+  const open = filteredUsers.length > 0 || filteredTasks.length > 0;
 
   return (
     <div className="relative flex-1">
@@ -92,14 +130,25 @@ function MentionInput({ value, onChange, onKeyDown, users, placeholder }) {
         placeholder={placeholder}
         value={value}
         onChange={handleChange}
-        onKeyDown={onKeyDown}
+        onKeyDown={e => {
+          // Enter escolhe o 1º item da lista em vez de enviar a mensagem
+          if (e.key === 'Enter' && open) {
+            e.preventDefault();
+            if (trigger === '#') insert(`#${filteredTasks[0].id}`);
+            else insert('@' + filteredUsers[0].name.split(' ')[0]);
+            return;
+          }
+          if (e.key === 'Escape' && open) { setTrigger(null); return; }
+          onKeyDown(e);
+        }}
       />
-      {showMentions && filtered.length > 0 && (
-        <div className="absolute bottom-full left-0 mb-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-20 max-h-40 overflow-y-auto w-48">
-          {filtered.map(u => (
+      {open && (
+        <div className="absolute bottom-full left-0 mb-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-20 max-h-52 overflow-y-auto w-72">
+          {filteredUsers.map(u => (
             <button
               key={u.id}
-              onClick={() => insertMention(u.name)}
+              type="button"
+              onClick={() => insert('@' + u.name.split(' ')[0])}
               className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-700 text-left text-sm text-gray-200"
             >
               <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-black" style={{ backgroundColor: u.avatar_color || '#D4AF37' }}>
@@ -108,6 +157,21 @@ function MentionInput({ value, onChange, onKeyDown, users, placeholder }) {
               {u.name}
             </button>
           ))}
+          {filteredTasks.map(t => {
+            const color = TASK_STATUS_COLOR[t.status] || TASK_STATUS_COLOR.todo;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => insert(`#${t.id}`)}
+                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-700 text-left"
+              >
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                <span className="text-sm text-gray-200 truncate flex-1">{t.title}</span>
+                {t.board_name && <span className="text-[10px] text-gray-500 flex-shrink-0">{t.board_name}</span>}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -117,7 +181,9 @@ function MentionInput({ value, onChange, onKeyDown, users, placeholder }) {
 export function Chat() {
   const { user } = useAuth();
   const api = useApi();
+  const navigate = useNavigate();
   const { on, emit, onlineUsers, connected } = useSocket();
+  const [tasks, setTasks] = useState([]);
   const [channels, setChannels] = useState([]);
   const [activeChannel, setActiveChannel] = useState('geral');
   const [activeDmWith, setActiveDmWith] = useState(null); // { id, name, avatar_color } for DMs
@@ -136,6 +202,8 @@ export function Chat() {
       setChannels(c);
       setUsers(u);
     });
+    // tarefas usadas na marcação com # e para montar o chip na mensagem
+    api.get('/api/tasks').then(setTasks).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -393,7 +461,11 @@ export function Chat() {
                           </div>
                         )}
                         <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${isOwn ? 'bg-primary text-white rounded-br-sm' : 'bg-gray-800 text-gray-200 rounded-bl-sm'} ${isMentioned && !isOwn ? 'ring-1 ring-yellow-500/30' : ''}`}>
-                          {content}
+                          <MessageContent
+                            content={content}
+                            tasks={tasks}
+                            onOpenTask={t => navigate(`/boards/${t.board_id}?task=${t.id}`)}
+                          />
                         </div>
                       </div>
                     </div>
@@ -420,7 +492,8 @@ export function Chat() {
             onChange={setInput}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }}
             users={users.filter(u => u.id !== user.id)}
-            placeholder={isDM && activeDmWith ? `Mensagem para ${activeDmWith.name}…` : `Mensagem em #${activeChannel}…`}
+            tasks={tasks}
+            placeholder={isDM && activeDmWith ? `Mensagem para ${activeDmWith.name}… (@ pessoa, # tarefa)` : `Mensagem em #${activeChannel}… (@ pessoa, # tarefa)`}
           />
           <div className="relative flex-shrink-0">
             <button
