@@ -73,7 +73,7 @@ export function Boards() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: '#1f1f1f' }}>
+      <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b flex-shrink-0" style={{ borderColor: '#1f1f1f' }}>
         <div>
           <h1 className="text-lg font-bold text-gray-100">Boards</h1>
           <p className="text-xs text-gray-500 mt-0.5">{boards.length} board{boards.length !== 1 ? 's' : ''} · Organize o trabalho da equipe</p>
@@ -86,7 +86,7 @@ export function Boards() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {boards.length === 0 ? (
           <div className="text-center py-20">
             <ClipboardDocumentListIcon className="w-16 h-16 text-gray-700 mx-auto mb-4" />

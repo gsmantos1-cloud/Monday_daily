@@ -25,7 +25,7 @@ const NAV = [
 
 const ROLE_LABELS = { owner: 'Dono', manager: 'Gerente', operational: 'Operacional' };
 
-export function Sidebar() {
+export function Sidebar({ mobileOpen = false, onClose = () => {} }) {
   const { user } = useAuth();
   const { onlineUsers, on, emit } = useSocket();
   const { alerts, dismissAlert } = useAlerts();
@@ -78,22 +78,36 @@ export function Sidebar() {
 
   const EMOJIS = ['📢', '📣', '⚠️', '🔔', '📅', '🏆', '🎯', '💡', '🚨', '✅'];
 
+  // No celular a gaveta é sempre completa (ignora o "collapsed" do desktop)
+  const showLabels = !collapsed || mobileOpen;
+
   return (
-    <aside
-      className={`flex flex-col h-full border-r transition-all duration-200 ${collapsed ? 'w-16' : 'w-56'}`}
-      style={{ backgroundColor: '#090909', borderColor: '#1f1f1f' }}
-    >
+    <>
+      {/* Backdrop — só no celular quando a gaveta está aberta */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 bg-black/60 z-40" onClick={onClose} />
+      )}
+      <aside
+        className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col h-full border-r transition-transform md:transition-all duration-200
+          w-64 ${collapsed ? 'md:w-16' : 'md:w-56'}
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
+        style={{ backgroundColor: '#090909', borderColor: '#1f1f1f' }}
+      >
       {/* Logo */}
       <div className="flex items-center gap-3 px-3 py-3 border-b min-h-[64px]" style={{ borderColor: '#1f1f1f' }}>
         <div className="flex-shrink-0 rounded-lg overflow-hidden w-10 h-10">
           <img src="/logo.png" alt="GS MANTOS" className="w-full h-full object-contain" />
         </div>
-        {!collapsed && (
-          <div className="min-w-0">
+        {showLabels && (
+          <div className="min-w-0 flex-1">
             <p className="font-black text-white tracking-widest text-sm leading-none">GS MANTOS</p>
             <p className="text-xs mt-0.5" style={{ color: '#D4AF37' }}>Sistema de Gestão</p>
           </div>
         )}
+        {/* Fechar — só no celular */}
+        <button onClick={onClose} className="md:hidden p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition" aria-label="Fechar menu">
+          <XMarkIcon className="w-5 h-5" />
+        </button>
       </div>
 
       {/* Nav */}
@@ -103,6 +117,7 @@ export function Sidebar() {
             key={to}
             to={to}
             end={exact}
+            onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 isActive ? 'text-black font-bold' : 'text-gray-500 hover:text-gray-200 hover:bg-white/5'
@@ -111,13 +126,13 @@ export function Sidebar() {
             style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, #D4AF37, #f0d060)' } : {}}
           >
             <Icon className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span className="flex-1">{label}</span>}
-            {!collapsed && label === 'Relatórios' && alerts.length > 0 && (
+            {showLabels && <span className="flex-1">{label}</span>}
+            {showLabels && label === 'Relatórios' && alerts.length > 0 && (
               <span className="ml-auto flex items-center justify-center w-5 h-5 rounded-full bg-red-600 text-white text-[10px] font-black">
                 {alerts.length}
               </span>
             )}
-            {collapsed && label === 'Relatórios' && alerts.length > 0 && (
+            {!showLabels && label === 'Relatórios' && alerts.length > 0 && (
               <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-600" />
             )}
           </NavLink>
@@ -126,6 +141,7 @@ export function Sidebar() {
         {(user?.role === 'owner' || user?.role === 'manager') && (
           <NavLink
             to="/settings"
+            onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 isActive ? 'text-black font-bold' : 'text-gray-500 hover:text-gray-200 hover:bg-white/5'
@@ -134,7 +150,7 @@ export function Sidebar() {
             style={({ isActive }) => isActive ? { background: 'linear-gradient(135deg, #D4AF37, #f0d060)' } : {}}
           >
             <Cog6ToothIcon className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span>Configurações</span>}
+            {showLabels && <span>Configurações</span>}
           </NavLink>
         )}
 
@@ -146,21 +162,21 @@ export function Sidebar() {
             title="Enviar aviso para todos"
           >
             <MegaphoneIcon className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span>Enviar Aviso</span>}
+            {showLabels && <span>Enviar Aviso</span>}
           </button>
         )}
       </nav>
 
       {/* Notifications */}
       <div className="px-2 py-1 border-t" style={{ borderColor: '#1f1f1f' }}>
-        <NotificationPanel collapsed={collapsed} />
+        <NotificationPanel collapsed={!showLabels} />
       </div>
 
       {/* User profile */}
       <div className="px-2 py-3 border-t" style={{ borderColor: '#1f1f1f' }}>
-        <NavLink to="/profile" className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-white/5 transition group">
+        <NavLink to="/profile" onClick={onClose} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-white/5 transition group">
           <Avatar user={user} size="sm" online={isOnline} />
-          {!collapsed && (
+          {showLabels && (
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-gray-200 truncate">{user?.name}</p>
               <p className="text-xs truncate" style={{ color: '#D4AF37' }}>{ROLE_LABELS[user?.role] || user?.role}</p>
@@ -169,14 +185,15 @@ export function Sidebar() {
         </NavLink>
       </div>
 
-      {/* Collapse toggle */}
+      {/* Collapse toggle — só no desktop */}
       <button
         onClick={() => setCollapsed(c => !c)}
-        className="flex items-center justify-center p-3 border-t text-gray-600 hover:text-gray-300 hover:bg-white/5 transition"
+        className="hidden md:flex items-center justify-center p-3 border-t text-gray-600 hover:text-gray-300 hover:bg-white/5 transition"
         style={{ borderColor: '#1f1f1f' }}
       >
         {collapsed ? <ChevronDoubleRightIcon className="w-4 h-4" /> : <ChevronDoubleLeftIcon className="w-4 h-4" />}
       </button>
+      </aside>
 
       {/* ── COMPOSE ANNOUNCEMENT MODAL (owner only) ── */}
       {showAnnounceModal && (
@@ -292,7 +309,7 @@ export function Sidebar() {
 
       {/* Alert overlay */}
       {(alerts.length > 0 || mentionAlerts.length > 0) && (
-        <div className="fixed bottom-4 right-4 z-40 space-y-2 max-w-sm">
+        <div className="fixed bottom-4 right-4 left-4 sm:left-auto z-40 space-y-2 sm:max-w-sm">
           {alerts.map(alert => {
             const isWarning = alert.type === 'warning';
             return (
@@ -331,6 +348,6 @@ export function Sidebar() {
           ))}
         </div>
       )}
-    </aside>
+    </>
   );
 }

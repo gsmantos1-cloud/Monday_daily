@@ -30,7 +30,7 @@ export function Profile() {
   };
 
   return (
-    <div className="p-6 max-w-xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-xl mx-auto">
       <h1 className="text-xl font-black text-gray-100 mb-6 tracking-wide">Meu Perfil</h1>
 
       <div className="card p-6 space-y-6">

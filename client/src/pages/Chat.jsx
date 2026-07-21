@@ -5,7 +5,7 @@ import { useApi } from '../contexts/ApiContext.jsx';
 import { useSocket } from '../contexts/SocketContext.jsx';
 import { Modal } from '../components/Modal.jsx';
 import { Avatar } from '../components/Avatar.jsx';
-import { PlusIcon, HashtagIcon, PaperAirplaneIcon, TrashIcon, ChatBubbleOvalLeftEllipsisIcon, FaceSmileIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, HashtagIcon, PaperAirplaneIcon, TrashIcon, ChatBubbleOvalLeftEllipsisIcon, FaceSmileIcon, ChevronLeftIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 
 const EMOJI_CATEGORIES = [
@@ -194,6 +194,8 @@ export function Chat() {
   const [users, setUsers] = useState([]);
   const [chatMentionAlerts, setChatMentionAlerts] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  // No celular mostramos uma coluna por vez: 'list' (canais) ou 'chat' (conversa)
+  const [mobileView, setMobileView] = useState('list');
   const bottomRef = useRef(null);
   const canManage = ['owner', 'manager'].includes(user?.role);
 
@@ -270,6 +272,7 @@ export function Chat() {
     const ch = await api.get(`/api/dm/${targetUser.id}`);
     setActiveDmWith(targetUser);
     setActiveChannel(ch.name);
+    setMobileView('chat');
     if (!channels.find(c => c.name === ch.name)) {
       setChannels(p => [...p, ch]);
     }
@@ -334,8 +337,8 @@ export function Chat() {
 
   return (
     <div className="flex h-full">
-      {/* Channel sidebar */}
-      <div className="w-56 flex-shrink-0 border-r border-gray-800 flex flex-col bg-gray-950">
+      {/* Channel sidebar — no celular ocupa a tela toda e some ao abrir uma conversa */}
+      <div className={`${mobileView === 'chat' ? 'hidden' : 'flex'} md:flex w-full md:w-56 flex-shrink-0 border-r border-gray-800 flex-col bg-gray-950`}>
         <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Canais</span>
           {canManage && (
@@ -349,7 +352,7 @@ export function Chat() {
             <div
               key={channel.id}
               className={`group flex items-center justify-between px-4 py-2 cursor-pointer transition ${activeChannel === channel.name ? 'bg-primary/20 text-primary' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}
-              onClick={() => { setActiveChannel(channel.name); setActiveDmWith(null); }}
+              onClick={() => { setActiveChannel(channel.name); setActiveDmWith(null); setMobileView('chat'); }}
             >
               <div className="flex items-center gap-2 min-w-0">
                 <HashtagIcon className="w-4 h-4 flex-shrink-0" />
@@ -398,10 +401,18 @@ export function Chat() {
         </div>
       </div>
 
-      {/* Chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Chat area — no celular ocupa a tela toda e só aparece após escolher uma conversa */}
+      <div className={`${mobileView === 'list' ? 'hidden' : 'flex'} md:flex flex-1 flex-col min-w-0`}>
         {/* Channel/DM header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-800">
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b border-gray-800">
+          {/* Voltar para a lista — só no celular */}
+          <button
+            onClick={() => setMobileView('list')}
+            className="md:hidden p-1.5 -ml-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition flex-shrink-0"
+            aria-label="Voltar aos canais"
+          >
+            <ChevronLeftIcon className="w-5 h-5" />
+          </button>
           {isDM && activeDmWith ? (
             <>
               <div className="relative">
@@ -431,7 +442,7 @@ export function Chat() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4">
           {Object.entries(grouped).map(([date, msgs]) => (
             <div key={date}>
               <div className="flex items-center gap-3 my-4">
@@ -485,7 +496,7 @@ export function Chat() {
         </div>
 
         {/* Input */}
-        <form onSubmit={sendMessage} className="flex items-center gap-3 px-6 py-4 border-t border-gray-800">
+        <form onSubmit={sendMessage} className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-t border-gray-800">
           <Avatar user={user} size="sm" />
           <MentionInput
             value={input}
@@ -519,7 +530,7 @@ export function Chat() {
 
       {/* DM mention notification overlay */}
       {chatMentionAlerts.length > 0 && (
-        <div className="fixed bottom-24 right-4 z-50 space-y-2 max-w-sm">
+        <div className="fixed bottom-24 right-4 left-4 sm:left-auto z-50 space-y-2 sm:max-w-sm">
           {chatMentionAlerts.map(alert => (
             <div
               key={alert.id}
@@ -527,6 +538,7 @@ export function Chat() {
               onClick={() => {
                 setActiveChannel(alert.channel);
                 setActiveDmWith(null);
+                setMobileView('chat');
                 setChatMentionAlerts(prev => prev.filter(a => a.id !== alert.id));
               }}
             >

@@ -122,7 +122,9 @@ export function NotificationPanel({ collapsed }) {
       {/* Dropdown panel */}
       {open && (
         <div
-          className="absolute left-full top-0 ml-2 w-80 rounded-xl shadow-2xl border z-50 flex flex-col overflow-hidden"
+          className="absolute z-50 flex flex-col overflow-hidden rounded-xl shadow-2xl border
+            left-0 top-full mt-2 w-72
+            md:left-full md:top-0 md:ml-2 md:mt-0 md:w-80"
           style={{ backgroundColor: '#141414', borderColor: '#2a2a2a', maxHeight: '420px' }}
         >
           {/* Header */}

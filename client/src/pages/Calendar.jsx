@@ -79,13 +79,13 @@ export function Calendar() {
   return (
     <div className="flex flex-col h-full">
       {/* Header — row 1: title + filters */}
-      <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: '#1f1f1f' }}>
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 sm:px-6 py-4 border-b flex-shrink-0" style={{ borderColor: '#1f1f1f' }}>
         <div>
           <h1 className="text-lg font-bold text-gray-100">Calendário</h1>
           <p className="text-xs text-gray-500 mt-0.5">{filtered.length} com prazo · {noDeadlineTasks.length} sem prazo</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Navigation */}
           <div className="flex items-center gap-1">
             <button onClick={() => setCurrentDate(v => view === 'month' ? subMonths(v, 1) : addDays(v, -7))} className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition">
@@ -143,7 +143,7 @@ export function Calendar() {
               return (
                 <div
                   key={i}
-                  className={`min-h-[100px] rounded-xl p-2 border transition ${today ? 'border-yellow-500/50 bg-yellow-500/5' : isCurrentMonth ? 'border-gray-800 bg-gray-900/40 hover:border-gray-700' : 'border-gray-900 bg-gray-950 opacity-40'}`}
+                  className={`min-h-[64px] sm:min-h-[100px] rounded-lg sm:rounded-xl p-1 sm:p-2 border transition ${today ? 'border-yellow-500/50 bg-yellow-500/5' : isCurrentMonth ? 'border-gray-800 bg-gray-900/40 hover:border-gray-700' : 'border-gray-900 bg-gray-950 opacity-40'}`}
                 >
                   <div className={`text-xs font-bold mb-1.5 w-6 h-6 flex items-center justify-center rounded-full ${today ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}>
                     {format(day, 'd')}

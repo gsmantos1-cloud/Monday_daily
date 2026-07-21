@@ -60,7 +60,7 @@ export function Team() {
   const getUserTasks = (uid) => tasks.filter(t => t.assignee_id === uid);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-100">Equipe</h1>

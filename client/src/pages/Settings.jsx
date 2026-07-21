@@ -92,7 +92,7 @@ export function Settings() {
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-xl font-bold text-gray-100">Configurações</h1>
         <p className="text-sm text-gray-400 mt-0.5">Gerencie o sistema e os recursos da equipe</p>

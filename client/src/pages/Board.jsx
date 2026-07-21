@@ -304,7 +304,7 @@ function TaskDrawer({ task, users, canManage, currentUser, onClose, onSave, onDe
     <div className="fixed inset-0 z-40 flex" onClick={onClose}>
       <div className="flex-1" />
       <div
-        className="w-[520px] h-full flex flex-col shadow-2xl border-l animate-slide-in"
+        className="w-full sm:w-[520px] h-full flex flex-col shadow-2xl border-l animate-slide-in"
         style={{ backgroundColor: '#141414', borderColor: '#2a2a2a' }}
         onClick={e => e.stopPropagation()}
       >
@@ -1731,7 +1731,7 @@ function ListView({ tasks, allTasks, users, canManage, userId, onOpen, onDelete,
   };
 
   return (
-    <div className="overflow-x-auto px-6 py-4" style={{ backgroundColor: '#161616' }}>
+    <div className="overflow-x-auto px-4 sm:px-6 py-4" style={{ backgroundColor: '#161616' }}>
       <div className="rounded-lg overflow-hidden border" style={{ borderColor: '#2d2d2d', backgroundColor: '#1f1f1f' }}>
         <table className="w-full border-collapse" style={{ minWidth: 1080 }}>
           <thead>
@@ -1836,7 +1836,7 @@ function BoardDashboard({ tasks, users, currentUser, canManage, onOpenTask }) {
   ];
 
   return (
-    <div className="overflow-y-auto h-full px-6 py-5" style={{ backgroundColor: '#161616' }}>
+    <div className="overflow-y-auto h-full px-4 sm:px-6 py-5" style={{ backgroundColor: '#161616' }}>
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -2443,7 +2443,7 @@ export function Board() {
   return (
     <div className="h-full flex flex-col">
       {/* Board header */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b border-gray-800 flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-gray-800 flex-shrink-0">
         <Link to="/boards" className="text-gray-400 hover:text-gray-200 transition">
           <ArrowLeftIcon className="w-5 h-5" />
         </Link>
@@ -2484,7 +2484,7 @@ export function Board() {
       </div>
 
       {/* Monday-style tab bar */}
-      <div className="flex items-center gap-0 px-6 border-b flex-shrink-0" style={{ borderColor: '#1f2937' }}>
+      <div className="flex items-center gap-0 px-4 sm:px-6 border-b flex-shrink-0 overflow-x-auto" style={{ borderColor: '#1f2937' }}>
         {[
           { id: 'kanban', label: 'Quadro principal' },
           { id: 'list',   label: 'Tabela' },
@@ -2507,9 +2507,9 @@ export function Board() {
       </div>
 
       {/* Filter bar */}
-      <div className="flex items-center gap-2 px-6 py-2.5 border-b flex-shrink-0" style={{ backgroundColor: '#0d0d0d', borderColor: '#1a1a1a' }}>
+      <div className="flex items-center gap-2 px-4 sm:px-6 py-2.5 border-b flex-shrink-0 overflow-x-auto" style={{ backgroundColor: '#0d0d0d', borderColor: '#1a1a1a' }}>
         {/* Search */}
-        <div className="relative">
+        <div className="relative flex-shrink-0">
           <MagnifyingGlassIcon className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             className="pl-8 pr-3 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-800 text-gray-300 placeholder-gray-600 focus:outline-none focus:border-primary w-44"
@@ -2521,7 +2521,7 @@ export function Board() {
 
         {/* Assignee filter */}
         <select
-          className="px-2 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-800 text-gray-300 focus:outline-none focus:border-primary"
+          className="px-2 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-800 text-gray-300 focus:outline-none focus:border-primary flex-shrink-0"
           value={filterAssignee}
           onChange={e => setFilterAssignee(e.target.value)}
         >
@@ -2531,7 +2531,7 @@ export function Board() {
 
         {/* Priority filter */}
         <select
-          className="px-2 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-800 text-gray-300 focus:outline-none focus:border-primary"
+          className="px-2 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-800 text-gray-300 focus:outline-none focus:border-primary flex-shrink-0"
           value={filterPriority}
           onChange={e => setFilterPriority(e.target.value)}
         >
@@ -2541,7 +2541,7 @@ export function Board() {
 
         {/* Status filter — shown for all views */}
         <select
-          className="px-2 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-800 text-gray-300 focus:outline-none focus:border-primary"
+          className="px-2 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-800 text-gray-300 focus:outline-none focus:border-primary flex-shrink-0"
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)}
         >
@@ -2554,7 +2554,7 @@ export function Board() {
         </select>
 
         {/* Quick filter buttons */}
-        <div className="flex items-center gap-1.5 ml-1">
+        <div className="flex items-center gap-1.5 ml-1 flex-shrink-0">
           {[
             { key: 'today', label: 'Hoje' },
             { key: 'week',  label: 'Esta Semana' },
@@ -2574,7 +2574,7 @@ export function Board() {
         {/* Show completed toggle */}
         <button
           onClick={() => setShowCompleted(s => !s)}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition border ml-1 ${showCompleted ? 'text-black border-transparent' : 'bg-gray-800/50 text-gray-400 hover:text-gray-200 border-gray-700'}`}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition border ml-1 flex-shrink-0 ${showCompleted ? 'text-black border-transparent' : 'bg-gray-800/50 text-gray-400 hover:text-gray-200 border-gray-700'}`}
           style={showCompleted ? { background: 'linear-gradient(135deg, #00c875, #34d399)', borderColor: 'transparent' } : {}}
           title={showCompleted ? 'Esconder concluídas antigas' : 'Mostrar concluídas antigas'}
         >
@@ -2583,7 +2583,7 @@ export function Board() {
         </button>
 
         {/* Sort button */}
-        <div className="relative ml-1">
+        <div className="relative ml-1 flex-shrink-0">
           <button
             onClick={() => setShowSortMenu(s => !s)}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition border ${sortBy.field ? 'text-black border-transparent' : 'bg-gray-800/50 text-gray-400 hover:text-gray-200 border-gray-700'}`}
@@ -2650,15 +2650,15 @@ export function Board() {
         {hasFilters && (
           <button
             onClick={() => { setSearch(''); setFilterAssignee(''); setFilterPriority(''); setFilterStatus(''); setQuickFilter(''); setSortBy({ field: '', dir: 'asc' }); setShowCompleted(false); }}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition px-2 py-1.5 rounded-lg hover:bg-gray-800"
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition px-2 py-1.5 rounded-lg hover:bg-gray-800 flex-shrink-0"
           >
             <XMarkIcon className="w-3.5 h-3.5" />
             Limpar
           </button>
         )}
 
-        <div className="flex-1" />
-        <span className="text-xs text-gray-600">{filteredTasks.length} tarefa{filteredTasks.length !== 1 ? 's' : ''}</span>
+        <div className="flex-1 min-w-[8px]" />
+        <span className="text-xs text-gray-600 flex-shrink-0">{filteredTasks.length} tarefa{filteredTasks.length !== 1 ? 's' : ''}</span>
       </div>
 
       {/* Saved views chips bar */}
@@ -2721,7 +2721,7 @@ export function Board() {
         ) : view === 'calendar' ? (
           <BoardCalendar tasks={filteredTasks} onOpenTask={setOpenTask} />
         ) : view === 'kanban' ? (
-          <div className="h-full overflow-x-auto p-6">
+          <div className="h-full overflow-x-auto p-4 sm:p-6">
             {/* ── GROUP BY DAY ── */}
             {(() => {
                 const dateMap = {};
