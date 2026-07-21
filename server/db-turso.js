@@ -99,9 +99,8 @@ async function refresh() {
 // Fila de writes para evitar race conditions
 let saveQueue = Promise.resolve();
 
-async function saveKey(key) {
+async function writeKey(key, value) {
   const db = getClient();
-  const value = JSON.stringify(data[key]);
   await db.execute({
     sql: `INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)`,
     args: [key, value]
@@ -110,9 +109,14 @@ async function saveKey(key) {
 
 function save(keys) {
   const toSave = keys || ['users', 'boards', 'tasks', 'comments', 'channels', 'messages', 'sessions', 'goals', 'ideas', 'task_history', 'notifications', '_seq'];
+  // Snapshot AGORA, no momento da mutação. Sem isto, o JSON.stringify rodava
+  // tarde (quando a escrita saía da fila) e, se um refresh/loadFromDb concorrente
+  // (ex.: polling de 4s) já tivesse reatribuído data[k], a escrita gravava o
+  // estado ANTIGO — perdendo a tarefa recém-criada/editada. Ver flush()/refresh().
+  const snapshot = toSave.map(k => [k, JSON.stringify(data[k])]);
   saveQueue = saveQueue.then(async () => {
     try {
-      await Promise.all(toSave.map(k => saveKey(k)));
+      await Promise.all(snapshot.map(([k, v]) => writeKey(k, v)));
     } catch (err) {
       console.error('[DB-Turso] Save error:', err.message);
     }
