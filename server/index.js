@@ -30,7 +30,8 @@ if (!IS_SERVERLESS) {
 }
 
 app.use(cors({ origin: '*' }));
-app.use(express.json());
+// limite maior p/ aceitar anexos de imagem (data URL comprimida em /api/attachments)
+app.use(express.json({ limit: '3mb' }));
 
 // ──────────────────────────────────────────────
 //  COERÊNCIA EM SERVERLESS (Vercel + Turso)
@@ -42,6 +43,9 @@ app.use(express.json());
 // ──────────────────────────────────────────────
 if (IS_SERVERLESS && typeof db.refresh === 'function') {
   app.use(async (req, res, next) => {
+    // Servir imagem não mexe nos blobs; pula o refresh/flush (pesado) para não
+    // recarregar todo o banco a cada <img> aberta.
+    if (req.method === 'GET' && req.path.startsWith('/api/attachments/')) return next();
     // Recarrega o cache do banco antes de qualquer leitura/escrita.
     try { await db.refresh(); } catch {}
     // Adia o fim da resposta até as escritas pendentes terminarem no Turso.
@@ -713,6 +717,41 @@ app.post('/api/upload', auth, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
   const url = `/uploads/${req.file.filename}`;
   res.json({ url, name: req.file.originalname, type: req.file.mimetype });
+});
+
+// ── Anexos de imagem (data URL comprimida no cliente, guardada no banco) ──
+// Persiste no serverless (Turso), diferente de /api/upload que grava em /tmp.
+app.post('/api/attachments', auth, async (req, res) => {
+  try {
+    const { dataUrl, name } = req.body;
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+      return res.status(400).json({ error: 'Imagem inválida' });
+    }
+    // ~1.5MB de binário após compressão (base64 ≈ 1,37x)
+    if (dataUrl.length > 2_000_000) return res.status(413).json({ error: 'Imagem muito grande. Tente uma menor.' });
+    if (!db.attachments) return res.status(501).json({ error: 'Upload de imagem indisponível neste modo' });
+    const id = await db.attachments.create(dataUrl);
+    res.json({ id, url: `/api/attachments/${id}`, name: (name || 'imagem').slice(0, 120) });
+  } catch (e) {
+    res.status(500).json({ error: 'Falha ao salvar a imagem' });
+  }
+});
+
+// Serve a imagem (público, para funcionar em <img>). Sem auth, igual ao /uploads.
+app.get('/api/attachments/:id', async (req, res) => {
+  try {
+    if (!db.attachments) return res.status(404).end();
+    const dataUrl = await db.attachments.get(req.params.id);
+    if (!dataUrl) return res.status(404).end();
+    const m = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl);
+    if (!m) return res.status(404).end();
+    const buf = Buffer.from(m[2], 'base64');
+    res.setHeader('Content-Type', m[1]);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.end(buf);
+  } catch {
+    res.status(500).end();
+  }
 });
 
 // ──────────────────────────────────────────────

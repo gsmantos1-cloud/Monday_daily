@@ -34,9 +34,16 @@ let initialized = false;
 // Essencial em serverless (Vercel): cada instância tem seu próprio cache; sem
 // recarregar a cada request, instâncias diferentes devolvem dados divergentes
 // (tarefas "aparecem e somem" conforme o poll cai numa instância ou noutra).
+// Chaves "de aplicação" (blobs por tabela) que ficam no cache em memória.
+// Anexos de imagem ficam em linhas `att_<id>` e são carregados SOB DEMANDA
+// (nunca entram no cache), para não pesar cada request/poll.
+const APP_KEYS = ['users', 'boards', 'tasks', 'comments', 'channels', 'messages', 'sessions', 'goals', 'ideas', 'task_history', 'notifications', '_seq'];
+
 async function loadFromDb() {
   const db = getClient();
-  const rows = await db.execute(`SELECT key, value FROM kv`);
+  // Carrega só os blobs conhecidos; ignora anexos (att_*) que são grandes.
+  const placeholders = APP_KEYS.map(() => '?').join(',');
+  const rows = await db.execute({ sql: `SELECT key, value FROM kv WHERE key IN (${placeholders})`, args: APP_KEYS });
   for (const row of rows.rows) {
     try {
       data[row.key] = JSON.parse(row.value);
@@ -47,7 +54,7 @@ async function loadFromDb() {
 
 function ensureDefaults() {
   if (!data._seq) data._seq = {};
-  const seqDefaults = { users: 0, boards: 0, tasks: 0, comments: 0, channels: 2, messages: 0, sessions: 0, goals: 0, ideas: 0, task_history: 0, notifications: 0 };
+  const seqDefaults = { users: 0, boards: 0, tasks: 0, comments: 0, channels: 2, messages: 0, sessions: 0, goals: 0, ideas: 0, task_history: 0, notifications: 0, attachments: 0 };
   for (const [k, v] of Object.entries(seqDefaults)) {
     if (!data._seq[k]) data._seq[k] = v;
   }
@@ -442,9 +449,26 @@ const notifications = {
   }
 };
 
+// ── Attachments (imagens) ──────────────────────
+// Gravadas/lidas como linhas próprias `att_<id>` no KV, FORA do cache em memória
+// (ver APP_KEYS/loadFromDb). Assim uma imagem só trafega quando é realmente aberta,
+// sem pesar o blob de tasks nem os polls de 4s.
+const attachments = {
+  create: async (dataUrl) => {
+    const id = nextId('attachments');           // usa data._seq.attachments (persistido via save)
+    await writeKey(`att_${id}`, dataUrl);        // grava direto no Turso e aguarda
+    return id;
+  },
+  get: async (id) => {
+    const db = getClient();
+    const r = await db.execute({ sql: `SELECT value FROM kv WHERE key = ?`, args: [`att_${parseInt(id)}`] });
+    return r.rows[0]?.value || null;
+  },
+};
+
 // Exporta init para ser chamado antes de usar o DB
 module.exports = {
   init, refresh, flush,
   users, boards, tasks, comments, channels, messages,
-  sessions, goals, ideas, taskHistory, notifications
+  sessions, goals, ideas, taskHistory, notifications, attachments
 };

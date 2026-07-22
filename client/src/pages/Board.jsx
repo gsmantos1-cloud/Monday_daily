@@ -53,10 +53,38 @@ function parseAttachments(v) {
   return [];
 }
 
+// Comprime a imagem no navegador (redimensiona + JPEG) para caber no banco sem pesar.
+async function fileToCompressedDataUrl(file, maxDim = 1280, quality = 0.72) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+  const img = await new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = dataUrl;
+  });
+  let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  if (Math.max(w, h) > maxDim) {
+    const s = maxDim / Math.max(w, h);
+    w = Math.round(w * s); h = Math.round(h * s);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 // Editor + visualização de anexos. `canEdit` controla a UI de adicionar/remover.
 function Attachments({ value = [], onChange, canEdit = true }) {
+  const api = useApi();
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
   const list = Array.isArray(value) ? value : [];
 
   const add = () => {
@@ -68,12 +96,31 @@ function Attachments({ value = [], onChange, canEdit = true }) {
   };
   const remove = (i) => onChange(list.filter((_, idx) => idx !== i));
 
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Selecione uma imagem.'); return; }
+    setUploading(true);
+    try {
+      const dataUrl = await fileToCompressedDataUrl(file);
+      const saved = await api.post('/api/attachments', { dataUrl, name: file.name });
+      onChange([...list, { url: saved.url, name: saved.name, type: 'image' }]);
+    } catch (err) {
+      alert(err.message || 'Falha ao enviar a imagem');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const isImg = (a) => a.type === 'image' || isImageUrl(a.url);
+
   return (
     <div className="space-y-2">
       {list.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {list.map((a, i) => (
-            isImageUrl(a.url) ? (
+            isImg(a) ? (
               <div key={i} className="relative group/att">
                 <a href={a.url} target="_blank" rel="noreferrer" title={attLabel(a)}>
                   <img src={a.url} alt={attLabel(a)} className="w-16 h-16 object-cover rounded-lg border" style={{ borderColor: '#2a2a2a' }} />
@@ -99,24 +146,39 @@ function Attachments({ value = [], onChange, canEdit = true }) {
         </div>
       )}
       {canEdit && (
-        <div className="flex flex-wrap gap-2">
-          <input
-            className="input text-sm flex-1 min-w-[160px]"
-            placeholder="Colar link ou URL da imagem…"
-            value={url}
-            onChange={e => setUrl(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-          />
-          <input
-            className="input text-sm w-28 flex-shrink-0"
-            placeholder="Nome (opcional)"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-          />
-          <button type="button" onClick={add} disabled={!url.trim()} className="px-3 py-2 rounded-lg text-black text-sm font-bold disabled:opacity-40 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #D4AF37, #f0d060)' }}>
-            <PlusIcon className="w-4 h-4" />
+        <div className="space-y-2">
+          {/* Upload de imagem do aparelho (ex: foto do WhatsApp) */}
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold border border-dashed transition disabled:opacity-50 text-gray-300 hover:text-white hover:border-primary"
+            style={{ borderColor: '#3a3a3a', backgroundColor: '#161616' }}
+          >
+            <PaperClipIcon className="w-4 h-4" />
+            {uploading ? 'Enviando imagem…' : 'Enviar imagem do aparelho'}
           </button>
+          {/* Ou colar um link / URL de imagem */}
+          <div className="flex flex-wrap gap-2">
+            <input
+              className="input text-sm flex-1 min-w-[160px]"
+              placeholder="…ou colar link ou URL da imagem"
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+            />
+            <input
+              className="input text-sm w-28 flex-shrink-0"
+              placeholder="Nome (opcional)"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+            />
+            <button type="button" onClick={add} disabled={!url.trim()} className="px-3 py-2 rounded-lg text-black text-sm font-bold disabled:opacity-40 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #D4AF37, #f0d060)' }}>
+              <PlusIcon className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
       {!canEdit && list.length === 0 && <span className="text-sm text-gray-600">Nenhum anexo.</span>}
