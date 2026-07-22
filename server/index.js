@@ -394,8 +394,15 @@ app.get('/api/tasks', auth, (req, res) => {
   res.json(tasks);
 });
 
+// Anexos (links/imagens): guardados sempre como string JSON, aceitando array ou string do cliente.
+const normAttachments = (v) => {
+  if (v == null) return '[]';
+  if (typeof v === 'string') return v;
+  try { return JSON.stringify(Array.isArray(v) ? v : []); } catch { return '[]'; }
+};
+
 app.post('/api/tasks', auth, (req, res) => {
-  const { title, description, status, priority, board_id, assignee_id, sector, deadline, start_date, recurring, recurrence, published_url, fixed, estimated_hours, actual_hours, parent_id, turno } = req.body;
+  const { title, description, status, priority, board_id, assignee_id, sector, deadline, start_date, recurring, recurrence, published_url, fixed, estimated_hours, actual_hours, parent_id, turno, attachments } = req.body;
   if (!title) return res.status(400).json({ error: 'Título obrigatório' });
   const task = db.tasks.create({
     title: title.trim(), description: description || '', status: status || 'todo',
@@ -410,6 +417,7 @@ app.post('/api/tasks', auth, (req, res) => {
     actual_hours: actual_hours ? parseFloat(actual_hours) : null,
     parent_id: parent_id ? parseInt(parent_id) : null,
     turno: turno || null,
+    attachments: normAttachments(attachments),
   });
   io.emit('task:created', task);
   // Also emit a parent update so subtask_count refreshes
@@ -496,6 +504,7 @@ app.put('/api/tasks/:id', auth, (req, res) => {
   setIf('recurring');
   setIf('recurrence');
   setIf('published_url');
+  setIf('attachments', normAttachments);
   setIf('depends_on');
   setIf('fixed', v => !!v);
   setIf('estimated_hours', v => v ? parseFloat(v) : null);

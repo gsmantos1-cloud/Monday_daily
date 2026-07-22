@@ -12,7 +12,7 @@ import {
   UserIcon, ArrowLeftIcon, XMarkIcon, CheckCircleIcon,
   ListBulletIcon, Squares2X2Icon, MagnifyingGlassIcon,
   PaperAirplaneIcon, CheckIcon, FunnelIcon, ChatBubbleLeftIcon,
-  ClockIcon, FlagIcon, PaperClipIcon
+  ClockIcon, FlagIcon, PaperClipIcon, LinkIcon
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 import { format, isPast, isToday, parseISO, getISOWeek, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns';
@@ -36,7 +36,93 @@ const PRIORITIES = [
 
 const PRIORITY_BAR = { low: 'bg-gray-600', medium: 'bg-warning', high: 'bg-danger', critical: 'bg-red-600' };
 
-const emptyForm = { title: '', description: '', status: 'todo', priority: 'medium', assignee_id: '', sector: '', start_date: '', deadline: '', recurring: 'none', recurrence: 'none', published_url: '', approval_status: '', depends_on: [], fixed: false, estimated_hours: '', actual_hours: '' };
+const emptyForm = { title: '', description: '', status: 'todo', priority: 'medium', assignee_id: '', sector: '', start_date: '', deadline: '', recurring: 'none', recurrence: 'none', published_url: '', approval_status: '', depends_on: [], fixed: false, estimated_hours: '', actual_hours: '', attachments: [] };
+
+// ── Anexos (links e imagens por URL) ──────────────────────────────────────────
+function isImageUrl(u = '') {
+  return /\.(png|jpe?g|gif|webp|svg|avif|bmp)(\?.*)?$/i.test(u) || u.startsWith('data:image/');
+}
+function attLabel(a) {
+  if (a.name) return a.name;
+  try { return new URL(a.url).hostname.replace(/^www\./, ''); } catch { return a.url; }
+}
+// Normaliza para array, aceitando string JSON, array ou vazio.
+function parseAttachments(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string' && v.trim()) { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
+  return [];
+}
+
+// Editor + visualização de anexos. `canEdit` controla a UI de adicionar/remover.
+function Attachments({ value = [], onChange, canEdit = true }) {
+  const [url, setUrl] = useState('');
+  const [name, setName] = useState('');
+  const list = Array.isArray(value) ? value : [];
+
+  const add = () => {
+    const u = url.trim();
+    if (!u) return;
+    const full = /^(https?:\/\/|data:)/i.test(u) ? u : `https://${u}`;
+    onChange([...list, { url: full, name: name.trim() }]);
+    setUrl(''); setName('');
+  };
+  const remove = (i) => onChange(list.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="space-y-2">
+      {list.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {list.map((a, i) => (
+            isImageUrl(a.url) ? (
+              <div key={i} className="relative group/att">
+                <a href={a.url} target="_blank" rel="noreferrer" title={attLabel(a)}>
+                  <img src={a.url} alt={attLabel(a)} className="w-16 h-16 object-cover rounded-lg border" style={{ borderColor: '#2a2a2a' }} />
+                </a>
+                {canEdit && (
+                  <button onClick={() => remove(i)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-900 border border-gray-600 text-gray-300 hover:text-danger flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition">
+                    <XMarkIcon className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <span key={i} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg border bg-gray-800/60 text-gray-200" style={{ borderColor: '#2a2a2a' }}>
+                <LinkIcon className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                <a href={a.url} target="_blank" rel="noreferrer" className="hover:underline max-w-[180px] truncate">{attLabel(a)}</a>
+                {canEdit && (
+                  <button onClick={() => remove(i)} className="text-gray-500 hover:text-danger flex-shrink-0">
+                    <XMarkIcon className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </span>
+            )
+          ))}
+        </div>
+      )}
+      {canEdit && (
+        <div className="flex flex-wrap gap-2">
+          <input
+            className="input text-sm flex-1 min-w-[160px]"
+            placeholder="Colar link ou URL da imagem…"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          />
+          <input
+            className="input text-sm w-28 flex-shrink-0"
+            placeholder="Nome (opcional)"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          />
+          <button type="button" onClick={add} disabled={!url.trim()} className="px-3 py-2 rounded-lg text-black text-sm font-bold disabled:opacity-40 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #D4AF37, #f0d060)' }}>
+            <PlusIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+      {!canEdit && list.length === 0 && <span className="text-sm text-gray-600">Nenhum anexo.</span>}
+    </div>
+  );
+}
 
 function fmtDate(d) {
   if (!d) return null;
@@ -177,6 +263,7 @@ function TaskDrawer({ task, users, canManage, currentUser, onClose, onSave, onDe
       recurring: task.recurring || 'none',
       recurrence: task.recurrence || 'none',
       published_url: task.published_url || '',
+      attachments: parseAttachments(task.attachments),
       depends_on: task.depends_on ? JSON.parse(task.depends_on) : [],
       fixed: task.fixed || false,
       estimated_hours: task.estimated_hours != null ? String(task.estimated_hours) : '',
@@ -221,6 +308,7 @@ function TaskDrawer({ task, users, canManage, currentUser, onClose, onSave, onDe
         assignee_id: form.assignee_id || null,
         checklist: JSON.stringify(form.checklist || []),
         depends_on: JSON.stringify(form.depends_on || []),
+        attachments: JSON.stringify(form.attachments || []),
       };
       await onSave(task.id, payload);
     } finally {
@@ -451,6 +539,18 @@ function TaskDrawer({ task, users, canManage, currentUser, onClose, onSave, onDe
                     <a href={task.published_url} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline">Ver publicação</a>
                   ) : <span className="text-sm text-gray-600">Não publicado ainda</span>
                 )}
+              </div>
+
+              {/* Attachments — links e imagens */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1.5 flex items-center gap-1.5">
+                  <PaperClipIcon className="w-3.5 h-3.5" /> Anexos
+                </label>
+                <Attachments
+                  value={form.attachments || []}
+                  onChange={(next) => setForm(f => ({ ...f, attachments: next }))}
+                  canEdit={canAct}
+                />
               </div>
 
               {/* Time estimates */}
@@ -809,6 +909,7 @@ function TaskCard({ task, canManage, userId, onOpen, onDelete, onDragStart, onSt
     } catch { return false; }
   })();
   const doneCount = checklist.filter(i => i.done).length;
+  const attCount = parseAttachments(task.attachments).length;
   const col = COLUMNS.find(c => c.key === task.status);
   const canAct = canManage || task.creator_id === userId || task.assignee_id === userId;
 
@@ -877,6 +978,11 @@ function TaskCard({ task, canManage, userId, onOpen, onDelete, onDragStart, onSt
         )}
         {task.recurrence && task.recurrence !== 'none' && (
           <span title={`Prazo automático: ${task.recurrence}`} className="text-[10px] text-blue-400">↻</span>
+        )}
+        {attCount > 0 && (
+          <span title={`${attCount} anexo${attCount !== 1 ? 's' : ''}`} className="flex items-center gap-0.5 text-[10px] text-gray-400">
+            <PaperClipIcon className="w-3 h-3" />{attCount}
+          </span>
         )}
         {task.approval_status === 'approved' && (
           <span title="Aprovado" className="text-[10px]">✅</span>
@@ -2957,6 +3063,15 @@ export function Board() {
               </button>
             </div>
           )}
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1 flex items-center gap-1.5">
+              <PaperClipIcon className="w-3.5 h-3.5" /> Anexos (links e imagens)
+            </label>
+            <Attachments
+              value={form.attachments || []}
+              onChange={(next) => setForm(f => ({ ...f, attachments: next }))}
+            />
+          </div>
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={() => setShowAdd(false)} className="btn-ghost flex-1">Cancelar</button>
             <button type="submit" disabled={loading} className="btn-primary flex-1">{loading ? 'Criando…' : 'Criar Tarefa'}</button>
